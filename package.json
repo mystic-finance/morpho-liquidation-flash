@@ -11,12 +11,14 @@
   "scripts": {
     "test": "yarn hardhat test",
     "run:bot": "yarn build:bot && ts-node scripts/runBot.ts",
+    "run:bot:fast": "tsc && ts-node scripts/runBot.ts",
     "lint:fix": "npx prettier '**/*.{json,sol,md,ts}' --write",
     "deploy:contracts": "hardhat run scripts/deploy.ts --network mainnet",
     "compile": "yarn hardhat compile",
     "build:bot": "yarn compile && tsc"
   },
   "dependencies": {
+    "@aave/core-v3": "^1.19.3",
     "@ethersproject/abi": "^5.0.0",
     "@ethersproject/bytes": "^5.0.0",
     "@ethersproject/providers": "^5.0.0",
@@ -32,8 +34,8 @@
     "@uniswap/v3-periphery": "1.4.1",
     "@uniswap/v3-sdk": "^3.9.0",
     "aws-sdk": "^2.1181.0",
-    "ethers": "^5.7.2",
     "axios": "^0.27.2",
+    "ethers": "^5.7.2",
     "hardhat": "^2.9.6",
     "lodash": "^4.17.21"
   },

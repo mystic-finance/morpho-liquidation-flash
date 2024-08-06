@@ -134,8 +134,13 @@ abstract contract FlashMintLiquidatorBase is
         uint256 balanceBefore = ERC20(_flashLoanParams.collateralUnderlying).balanceOf(
             address(this)
         );
+        uint256[] memory daiToFlashLoanArr;
+        daiToFlashLoanArr[0] = daiToFlashLoan;
 
-        lender.flashLoan(this, address(dai), daiToFlashLoan, data);
+        address[] memory daiArr;
+        daiArr[0] = address(dai);
+
+        lender.flashLoan(this, daiArr, daiToFlashLoanArr, data);
 
         seized_ =
             ERC20(_flashLoanParams.collateralUnderlying).balanceOf(address(this)) -

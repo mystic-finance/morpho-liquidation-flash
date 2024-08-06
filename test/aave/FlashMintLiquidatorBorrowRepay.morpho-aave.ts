@@ -47,7 +47,7 @@ describe("Test Flash Mint liquidator on MakerDAO for Morpho AAVE", () => {
       config.lender,
       config.univ3Router,
       config.addressesProvider,
-      config.morphoAave,
+      // config.morphoAave,
       config.tokens.dai.aToken,
       config.slippageTolerance
     );

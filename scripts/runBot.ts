@@ -31,10 +31,14 @@ const initializers: Record<
   aave: initAave,
   compound: initCompound,
 };
+
 const main = async (): Promise<any> => {
-  const useFlashLiquidator = process.argv.includes("--flash");
+  const useFlashLiquidator = process.env.FLASH_LIQUIDATOR;
   const pk = process.env.PRIVATE_KEY;
-  const provider = new providers.AlchemyProvider(1, process.env.ALCHEMY_KEY);
+  const provider = new providers.AlchemyProvider(
+    +(process.env.CHAIN_ID + ""),
+    process.env.ALCHEMY_KEY
+  );
 
   let wallet: Wallet | undefined;
   if (!pk) {
@@ -53,6 +57,8 @@ const main = async (): Promise<any> => {
         throw new Error(`Invalid liquidator address ${liquidatorAddress}`);
     });
   }
+
+  console.log({ liquidatorAddresses });
 
   // Check protocols
   const protocols = process.env.PROTOCOLS?.split(",");
@@ -86,7 +92,6 @@ const main = async (): Promise<any> => {
       liquidationHandler = new EOAHandler(morpho, wallet, logger);
       console.log("Using EOA handler");
     }
-    console.time(protocol);
     console.timeLog(protocol, `Starting bot initialization`);
     const bot = new LiquidationBot(
       logger,

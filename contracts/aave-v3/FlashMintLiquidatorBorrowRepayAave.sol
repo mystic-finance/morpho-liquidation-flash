@@ -24,10 +24,10 @@ contract FlashMintLiquidatorBorrowRepayAave is FlashMintLiquidatorBaseAave {
         IERC3156FlashLender _lender,
         ISwapRouter _uniswapV3Router,
         ILendingPoolAddressesProvider _addressesProvider,
-        IMorpho _morpho,
+        // IMorpho _morpho,
         IAToken _aDai,
         uint256 _slippageTolerance
-    ) FlashMintLiquidatorBaseAave(_lender, _morpho, _addressesProvider, _aDai) {
+    ) FlashMintLiquidatorBaseAave(_lender, _addressesProvider, _aDai) {
         uniswapV3Router = _uniswapV3Router;
         slippageTolerance = _slippageTolerance;
         emit SlippageToleranceSet(_slippageTolerance);

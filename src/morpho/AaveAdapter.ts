@@ -3,26 +3,37 @@ import {
   AavePriceOracle,
   AToken__factory,
   ERC20__factory,
+  LendingPool,
   MorphoAaveV2Lens,
   ProtocolDataProvider,
   ProtocolDataProvider__factory,
 } from "@morpho-labs/morpho-ethers-contract";
-import { BigNumber } from "ethers";
+import { BigNumber, ethers } from "ethers";
 import config from "../../config";
 import underlyings from "../constant/underlyings";
 import { pow10 } from "../../test/helpers";
 import { PercentMath, WadRayMath } from "@morpho-labs/ethers-utils/lib/maths";
+import { parseUnits } from "ethers/lib/utils";
+import AToken from "@aave/core-v3/artifacts/contracts/protocol/tokenization/AToken.sol/AToken.json";
 
-export default class MorphoAaveAdapter implements IMorphoAdapter {
+export default class AaveAdapter implements IMorphoAdapter {
   private protocolDataProvider: ProtocolDataProvider;
   private ethUsdPrice?: BigNumber;
-  constructor(public lens: MorphoAaveV2Lens, public oracle: AavePriceOracle) {
+  private pool?: ethers.Contract;
+  constructor(
+    public lendingPool: ethers.Contract,
+    public oracle: AavePriceOracle
+  ) {
     // this.morpho = MorphoAaveV2__factory.connect(morphoAddress, provider as any);
-    // this.lens = MorphoAaveV2Lens__factory.connect(lensAddress, provider as any);
+    this.pool = lendingPool;
     this.protocolDataProvider = ProtocolDataProvider__factory.connect(
       config.protocolDataProvider,
-      lens.provider as any
+      oracle.provider as any
     );
+  }
+
+  public getMarket(market: string) {
+    return new ethers.Contract(market, AToken.abi, this.oracle.provider);
   }
 
   public async toUsd(market: string, amount: BigNumber, price: BigNumber) {
@@ -74,22 +85,41 @@ export default class MorphoAaveAdapter implements IMorphoAdapter {
     };
   }
 
-  public async getUserHealthFactor(user: string): Promise<BigNumber> {
-    return this.lens.getUserHealthFactor(user);
+  public async getUserPoolData(user: string): Promise<any> {
+    return this.pool?.getUserAccountData(user);
+  }
+
+  public async getPoolFromMarket(market: string): Promise<any> {
+    const marketContract = this.getMarket(market);
+    return marketContract?.POOL();
   }
 
   public async getCurrentSupplyBalanceInOf(
     market: string,
     userAddress: string
   ): Promise<any> {
-    return this.lens.getCurrentSupplyBalanceInOf(market, userAddress);
+    const poolData = await this.getUserPoolData(userAddress);
+
+    return { totalBalance: poolData.totalCollateralBase };
   }
 
   public async getCurrentBorrowBalanceInOf(
     market: string,
     userAddress: string
   ): Promise<any> {
-    return this.lens.getCurrentBorrowBalanceInOf(market, userAddress);
+    const poolData = await this.getUserPoolData(userAddress);
+
+    return { totalBalance: poolData.totalDebtBase };
+  }
+
+  public async getUserHealthFactor(user: string): Promise<BigNumber> {
+    try {
+      const poolData = await this.getUserPoolData(user);
+
+      return poolData.healthFactor;
+    } catch {
+      return parseUnits("0");
+    }
   }
 
   public async normalize(
@@ -115,17 +145,22 @@ export default class MorphoAaveAdapter implements IMorphoAdapter {
     };
   }
 
-  public async getMarkets(): Promise<string[]> {
-    return this.lens.getAllMarkets();
+  public async getMarkets(markets: string[]): Promise<any[]> {
+    const allMarkets = [];
+    for (let i = 0; i < markets.length; i++) {
+      const market = this.getPoolFromMarket(markets[i]);
+      allMarkets.push(market);
+    }
+    return allMarkets; //this.lens.getAllMarkets();
   }
 
   public async getLiquidationBonus(market: string): Promise<BigNumber> {
-    const underlying = underlyings[market.toLowerCase()];
+    // const underlying = underlyings[market.toLowerCase()];
 
-    const { liquidationBonus } =
-      await this.protocolDataProvider.getReserveConfigurationData(underlying);
+    // const { liquidationBonus } =
+    //   await this.protocolDataProvider.getReserveConfigurationData(underlying);
 
-    return liquidationBonus;
+    return parseUnits("0.01");
   }
 
   private async _getEthUsdPrice(): Promise<BigNumber> {
@@ -142,7 +177,7 @@ export default class MorphoAaveAdapter implements IMorphoAdapter {
     if (!this._decimalsMap[underlying]) {
       const contract = ERC20__factory.connect(
         underlying,
-        this.lens.provider as any
+        this.protocolDataProvider.provider as any
       );
       this._decimalsMap[underlying] = await contract.decimals();
     }
@@ -153,7 +188,10 @@ export default class MorphoAaveAdapter implements IMorphoAdapter {
   private async _getUnderlying(market: string): Promise<string> {
     let underlying = underlyings[market.toLowerCase()];
     if (!underlying) {
-      const aToken = AToken__factory.connect(market, this.lens.provider as any);
+      const aToken = AToken__factory.connect(
+        market,
+        this.protocolDataProvider.provider as any
+      );
       underlying = (await aToken.UNDERLYING_ASSET_ADDRESS()).toLowerCase();
     }
     return underlying;

@@ -64,6 +64,20 @@ export default class MorphoCompoundAdapter implements IMorphoAdapter {
     return this.lens.getUserHealthFactor(user, []);
   }
 
+  public async getCurrentSupplyBalanceInOf(
+    market: string,
+    userAddress: string
+  ): Promise<any> {
+    return this.lens.getCurrentSupplyBalanceInOf(market, userAddress);
+  }
+
+  public async getCurrentBorrowBalanceInOf(
+    market: string,
+    userAddress: string
+  ): Promise<any> {
+    return this.lens.getCurrentBorrowBalanceInOf(market, userAddress);
+  }
+
   public async normalize(
     market: string,
     balances: BigNumber[]

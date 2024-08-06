@@ -61,9 +61,9 @@ describe("Test Liquidation Bot for Morpho-Aave", () => {
       config.lender,
       config.univ3Router,
       config.addressesProvider,
-      config.morphoAave,
+      // config.morphoAave,
       config.tokens.dai.aToken,
-      config.slippageTolerance
+      config.slippageTolerance + ""
     );
     await flashLiquidator.deployed();
 

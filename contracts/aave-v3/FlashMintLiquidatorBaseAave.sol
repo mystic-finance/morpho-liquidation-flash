@@ -4,11 +4,11 @@ pragma solidity 0.8.13;
 import "../interface/IERC3156FlashLender.sol";
 import "../interface/IERC3156FlashBorrower.sol";
 import "../interface/IWETH.sol";
-import "../interface/aave-v2/aave/ILendingPoolAddressesProvider.sol";
-import "../interface/aave-v2/aave/IPriceOracleGetter.sol";
-import "../interface/aave-v2/aave/IAToken.sol";
-import "../interface/aave-v2/IMorpho.sol";
-import "../interface/aave-v2/libraries/aave/ReserveConfiguration.sol";
+import "../interface/aave-v3/aave/ILendingPoolAddressesProvider.sol";
+import "../interface/aave-v3/aave/IPriceOracleGetter.sol";
+import "../interface/aave-v3/aave/IAToken.sol";
+import "../interface/aave-v3/aave/ILendingPool.sol";
+import "../interface/aave-v3/libraries/aave/ReserveConfiguration.sol";
 
 import "@morphodao/morpho-core-v1/contracts/compound/interfaces/compound/ICompound.sol";
 
@@ -77,7 +77,7 @@ abstract contract FlashMintLiquidatorBaseAave is
     uint256 public slippageTolerance; // in BASIS_POINTS units
 
     IERC3156FlashLender public immutable lender;
-    IMorpho public immutable morpho;
+    // IMorpho public immutable morpho;
     ILendingPoolAddressesProvider public immutable addressesProvider;
     ILendingPool public immutable lendingPool;
     IAToken public immutable aDai;
@@ -85,14 +85,14 @@ abstract contract FlashMintLiquidatorBaseAave is
 
     constructor(
         IERC3156FlashLender _lender,
-        IMorpho _morpho,
+        // IMorpho _morpho,
         ILendingPoolAddressesProvider _addressesProvider,
         IAToken _aDai
     ) SharedLiquidator() {
         lender = _lender;
-        morpho = _morpho;
+        // morpho = _morpho;
         addressesProvider = _addressesProvider;
-        lendingPool = ILendingPool(_addressesProvider.getLendingPool());
+        lendingPool = ILendingPool(_addressesProvider.getPool());
         aDai = _aDai;
         dai = ERC20(_aDai.UNDERLYING_ASSET_ADDRESS());
     }
@@ -102,12 +102,16 @@ abstract contract FlashMintLiquidatorBaseAave is
         returns (uint256 seized_)
     {
         uint256 balanceBefore = _liquidateParams.collateralUnderlying.balanceOf(address(this));
-        _liquidateParams.borrowedUnderlying.safeApprove(address(morpho), _liquidateParams.toRepay);
-        morpho.liquidate(
-            address(_liquidateParams.poolTokenBorrowed),
-            address(_liquidateParams.poolTokenCollateral),
-            _liquidateParams.borrower,
+        _liquidateParams.borrowedUnderlying.safeApprove(
+            address(lendingPool),
             _liquidateParams.toRepay
+        );
+        lendingPool.liquidationCall(
+            address(_liquidateParams.poolTokenCollateral),
+            address(_liquidateParams.poolTokenBorrowed),
+            _liquidateParams.borrower,
+            _liquidateParams.toRepay,
+            true
         );
         seized_ = _liquidateParams.collateralUnderlying.balanceOf(address(this)) - balanceBefore;
         emit Liquidated(

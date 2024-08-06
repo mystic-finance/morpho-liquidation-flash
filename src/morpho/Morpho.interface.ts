@@ -3,8 +3,8 @@ import { MorphoAaveV2Lens } from "@morpho-labs/morpho-ethers-contract";
 import { MorphoCompoundLens } from "@morpho-labs/morpho-ethers-contract/lib/compound/MorphoCompoundLens";
 
 export interface IMorphoAdapter {
-  lens: MorphoAaveV2Lens | MorphoCompoundLens;
-  getMarkets: () => Promise<string[]>;
+  lens?: MorphoAaveV2Lens | MorphoCompoundLens;
+  getMarkets: (markets: string[]) => Promise<any[]>;
 
   getLiquidationBonus: (market: string) => Promise<BigNumber>;
   getUserHealthFactor: (user: string) => Promise<BigNumber>;
@@ -12,6 +12,16 @@ export interface IMorphoAdapter {
     market: string,
     balances: BigNumber[]
   ) => Promise<{ price: BigNumber; balances: BigNumber[] }>;
+
+  getCurrentSupplyBalanceInOf(
+    market: string,
+    userAddress: string
+  ): Promise<any>;
+
+  getCurrentBorrowBalanceInOf(
+    market: string,
+    userAddress: string
+  ): Promise<any>;
 
   getMaxLiquidationAmount: (
     debtMarket: {

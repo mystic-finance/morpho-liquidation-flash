@@ -83,9 +83,9 @@ contract FlashMintLiquidatorBorrowRepayCompound is FlashMintLiquidatorBase, ILiq
     /// @dev ERC-3156 Flash loan callback
     function onFlashLoan(
         address _initiator,
-        address ,
+        address,
         uint256 _amount,
-        uint256 ,
+        uint256,
         bytes calldata data
     ) external override returns (bytes32) {
         if (msg.sender != address(lender)) revert UnknownLender();
@@ -96,10 +96,27 @@ contract FlashMintLiquidatorBorrowRepayCompound is FlashMintLiquidatorBase, ILiq
         return FLASHLOAN_CALLBACK;
     }
 
-    function _flashLoanInternal(
-        FlashLoanParams memory _flashLoanParams,
-        uint256 _amountIn
-    ) internal {
+    /// @dev ERC-3156 Flash loan callback for Balancer
+    function receiveFlashLoan(
+        address[] memory tokens,
+        uint256[] memory _amounts,
+        uint256[] memory _feeAmounts,
+        bytes calldata data
+    ) external returns (bytes32) {
+        uint256 _amount = _amounts[0];
+        uint256 _feeAmount = _feeAmounts[0];
+        if (msg.sender != address(lender)) revert UnknownLender();
+        // if (_initiator != address(this)) revert UnknownInitiator();
+        FlashLoanParams memory flashLoanParams = _decodeData(data);
+
+        _flashLoanInternal(flashLoanParams, _amount);
+        dai.safeTransfer(address(lender), _amount + _feeAmount);
+        return FLASHLOAN_CALLBACK;
+    }
+
+    function _flashLoanInternal(FlashLoanParams memory _flashLoanParams, uint256 _amountIn)
+        internal
+    {
         if (_flashLoanParams.borrowedUnderlying != address(dai)) {
             dai.safeApprove(address(cDai), _amountIn);
 
@@ -139,11 +156,7 @@ contract FlashMintLiquidatorBorrowRepayCompound is FlashMintLiquidatorBase, ILiq
                 address(uniswapV3Router),
                 maxIn
             );
-            _doSecondSwap(
-                _flashLoanParams.path,
-                _flashLoanParams.toLiquidate,
-                maxIn
-            );
+            _doSecondSwap(_flashLoanParams.path, _flashLoanParams.toLiquidate, maxIn);
         }
         if (_flashLoanParams.borrowedUnderlying != address(dai)) {
             if (_flashLoanParams.borrowedUnderlying == address(wEth)) {

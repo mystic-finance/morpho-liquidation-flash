@@ -1,6 +1,6 @@
 import { BigNumber, providers } from "ethers";
 import { Logger } from "./interfaces/logger";
-import { IFetcher } from "./interfaces/IFetcher";
+import { IAaveFetcher, IFetcher } from "./interfaces/IFetcher";
 import { formatUnits, parseUnits } from "ethers/lib/utils";
 import stablecoins from "./constant/stablecoins";
 import { ethers } from "hardhat";
@@ -25,7 +25,9 @@ const defaultSettings: LiquidationBotSettings = {
 };
 
 export default class LiquidationBot {
-  static W_ETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".toLowerCase();
+  static W_ETH =
+    process.env.WETH ||
+    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".toLowerCase();
   markets: string[] = [];
   static readonly HF_THRESHOLD = parseUnits("1");
   settings: LiquidationBotSettings = defaultSettings;
@@ -55,7 +57,10 @@ export default class LiquidationBot {
         }))
       ).then((healthFactors) =>
         healthFactors.filter((userHf) => {
-          if (userHf.hf.lt(parseUnits("1.0001")))
+          if (
+            userHf.hf.lt(parseUnits("0.65")) &&
+            userHf.hf.gt(parseUnits("0.01"))
+          )
             this.logger.log(
               `User ${userHf.address} has a low HF (${formatUnits(userHf.hf)})`
             );
@@ -63,8 +68,27 @@ export default class LiquidationBot {
         })
       );
       liquidableUsers = [...liquidableUsers, ...newLiquidatableUsers];
+      this.delay(100);
+      hasMore = false;
     }
+    console.log(liquidableUsers.length);
     return liquidableUsers;
+  }
+
+  async computeMarkets() {
+    // let lastId = "";
+    // let hasMore = true;
+    let markets = await this.fetcher.fetchMarkets?.();
+    this.logger.log(`${markets?.markets?.length} markets fetched`);
+
+    const activeMarkets = markets?.markets as string[];
+
+    console.log(activeMarkets.length);
+    return activeMarkets;
+  }
+
+  delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async liquidate(
@@ -85,9 +109,8 @@ export default class LiquidationBot {
     return this.liquidationHandler.handleLiquidation(liquidationParams);
   }
 
-  async getUserLiquidationParams(userAddress: string) {
+  async getUserLiquidationParams(userAddress: string, markets: string[] = []) {
     // first fetch all user balances
-    const markets = await this.adapter.getMarkets();
 
     const balances = await Promise.all(
       markets.map(async (market) => {
@@ -95,9 +118,10 @@ export default class LiquidationBot {
           { totalBalance: totalSupplyBalance },
           { totalBalance: totalBorrowBalance },
         ] = await Promise.all([
-          this.adapter.lens.getCurrentSupplyBalanceInOf(market, userAddress),
-          this.adapter.lens.getCurrentBorrowBalanceInOf(market, userAddress),
+          this.adapter.getCurrentSupplyBalanceInOf(market, userAddress),
+          this.adapter.getCurrentBorrowBalanceInOf(market, userAddress),
         ]);
+
         const {
           price,
           balances: [totalSupplyBalanceUSD, totalBorrowBalanceUSD],
@@ -260,12 +284,15 @@ export default class LiquidationBot {
     this.logger.log(`Found ${users.length} users liquidatable`);
     // use the batch size to limit the number of users to liquidate
     const toLiquidate: UserLiquidationParams[] = [];
+    const markets = await this.computeMarkets();
     for (let i = 0; i < users.length; i += this.settings.batchSize) {
       const liquidationsParams = await Promise.all(
         users
           .slice(i, Math.min(i + this.settings.batchSize, users.length))
-          .map((u) => this.getUserLiquidationParams(u.address))
+          .map((u) => this.getUserLiquidationParams(u.address, markets))
       );
+      // console.log({ liquidationsParams });
+
       const batchToLiquidate = (
         await Promise.all(
           liquidationsParams.map(async (user) => {
@@ -283,6 +310,7 @@ export default class LiquidationBot {
       ).filter(Boolean) as UserLiquidationParams[];
       toLiquidate.push(...batchToLiquidate);
     }
+
     if (toLiquidate.length > 0) {
       this.logger.log(`${toLiquidate.length} users to liquidate`);
       for (const userToLiquidate of toLiquidate) {
@@ -290,6 +318,7 @@ export default class LiquidationBot {
           userToLiquidate!.debtMarket.market,
           userToLiquidate!.collateralMarket.market
         );
+        // console.log(swapPath);
         const liquidateParams: LiquidationParams = {
           poolTokenBorrowed: userToLiquidate!.debtMarket.market,
           poolTokenCollateral: userToLiquidate!.collateralMarket.market,
@@ -298,7 +327,10 @@ export default class LiquidationBot {
           amount: userToLiquidate!.toLiquidate,
           swapPath,
         };
+        // console.log(liquidateParams);
+        console.log("here");
         await this.liquidationHandler.handleLiquidation(liquidateParams);
+        console.log("done");
       }
     }
   }
