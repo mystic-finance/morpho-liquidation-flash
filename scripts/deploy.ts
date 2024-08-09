@@ -2,6 +2,8 @@ import { ethers } from "hardhat";
 import config, { AVAILABLE_PROTOCOLS } from "../config";
 import { formatUnits } from "ethers/lib/utils";
 
+require("dotenv").config();
+
 const contractsNames: Record<string, string> = {
   aave: "FlashMintLiquidatorBorrowRepayAave",
   compound: "FlashMintLiquidatorBorrowRepayCompound",
@@ -11,8 +13,8 @@ const params: Record<string, any[]> = {
     config.lender,
     config.univ3Router,
     config.addressesProvider,
-    config.morphoAave,
-    config.tokens.dai.aToken,
+    // config.morphoAave,
+    config.aToken,
     config.slippageTolerance,
   ],
   compound: [
@@ -25,7 +27,10 @@ const params: Record<string, any[]> = {
 };
 
 async function main() {
-  const [signer] = await ethers.getSigners();
+  // const [signer] = await ethers.getSigners();
+  const provider = new ethers.providers.JsonRpcProvider(process.env.RPC);
+  const signer = new ethers.Wallet(process.env.PRIVATE_KEY as string, provider);
+  console.log(process.env.PRIVATE_KEY);
   console.log("signer", signer.address);
 
   // Check protocols
@@ -45,7 +50,9 @@ async function main() {
 
     const balance = await signer.getBalance();
     console.log("ETH balance", formatUnits(balance));
+    console.log("doc", params[protocol]);
     const transaction = await FlashMintLiquidator.deploy(...params[protocol]);
+    console.log(transaction);
     const deploymentAddress = transaction.address;
     console.log(
       `Deploying liquidator for Morpho ${protocol} at address`,

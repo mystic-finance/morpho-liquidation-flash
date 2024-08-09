@@ -7,7 +7,7 @@ import {
   MorphoAaveV2,
   MorphoCompound,
 } from "@morpho-labs/morpho-ethers-contract";
-import { BigNumberish, constants, Overrides, Signer } from "ethers";
+import { BigNumberish, constants, ethers, Overrides, Signer } from "ethers";
 import { Logger } from "../interfaces/logger";
 
 export interface EOAHandlerOptions {
@@ -29,7 +29,7 @@ const APPROVE_ZERO_TOKENS = ["0x0000000000000000000000000000000000000000"];
 export default class EOAHandler implements ILiquidationHandler {
   options: EOAHandlerOptions;
   constructor(
-    private readonly morpho: MorphoCompound | MorphoAaveV2,
+    private readonly morpho: ethers.Contract,
     private readonly signer: Signer,
     private readonly logger: Logger,
     options: Partial<EOAHandlerOptions> = {}

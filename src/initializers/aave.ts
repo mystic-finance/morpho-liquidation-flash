@@ -43,7 +43,7 @@ const initAave = async (provider: providers.Provider) => {
   );
 
   const adapter = new AaveAdapter(pool, oracle);
-  return { adapter, fetcher, morpho };
+  return { adapter, fetcher, pool };
 };
 
 export default initAave;

@@ -18,7 +18,7 @@ import "../libraries/PercentageMath.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "../common/SharedLiquidator.sol";
 
-abstract contract FlashMintLiquidatorBaseAave is
+abstract contract FlashMintLiquidatorBaseAaveV2 is
     ReentrancyGuard,
     SharedLiquidator,
     IERC3156FlashBorrower

@@ -4,7 +4,7 @@ pragma solidity 0.8.13;
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "./FlashMintLiquidatorBaseAave.sol";
 
-contract FlashMintLiquidatorBorrowRepayAave is FlashMintLiquidatorBaseAave {
+contract FlashMintLiquidatorBorrowRepayAaveV2 is FlashMintLiquidatorBaseAaveV2 {
     using SafeTransferLib for ERC20;
     using CompoundMath for uint256;
     using PercentageMath for uint256;
@@ -27,7 +27,7 @@ contract FlashMintLiquidatorBorrowRepayAave is FlashMintLiquidatorBaseAave {
         IMorpho _morpho,
         IAToken _aDai,
         uint256 _slippageTolerance
-    ) FlashMintLiquidatorBaseAave(_lender, _morpho, _addressesProvider, _aDai) {
+    ) FlashMintLiquidatorBaseAaveV2(_lender, _morpho, _addressesProvider, _aDai) {
         uniswapV3Router = _uniswapV3Router;
         slippageTolerance = _slippageTolerance;
         emit SlippageToleranceSet(_slippageTolerance);

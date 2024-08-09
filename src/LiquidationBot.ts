@@ -69,7 +69,7 @@ export default class LiquidationBot {
       );
       liquidableUsers = [...liquidableUsers, ...newLiquidatableUsers];
       this.delay(100);
-      hasMore = false;
+      // hasMore = false;
     }
     console.log(liquidableUsers.length);
     return liquidableUsers;
@@ -83,7 +83,6 @@ export default class LiquidationBot {
 
     const activeMarkets = markets?.markets as string[];
 
-    console.log(activeMarkets.length);
     return activeMarkets;
   }
 

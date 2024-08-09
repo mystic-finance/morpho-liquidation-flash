@@ -1,5 +1,5 @@
 import * as dotenv from "dotenv";
-import { providers, Wallet } from "ethers";
+import { ethers, providers, Wallet } from "ethers";
 import { isAddress, parseUnits } from "ethers/lib/utils";
 import initAave from "../src/initializers/aave";
 import initCompound from "../src/initializers/compound";
@@ -25,7 +25,7 @@ const initializers: Record<
   (provider: providers.Provider) => Promise<{
     fetcher: IFetcher;
     adapter: IMorphoAdapter;
-    morpho: MorphoCompound | MorphoAaveV2;
+    pool: ethers.Contract;
   }>
 > = {
   aave: initAave,
@@ -35,10 +35,11 @@ const initializers: Record<
 const main = async (): Promise<any> => {
   const useFlashLiquidator = process.env.FLASH_LIQUIDATOR;
   const pk = process.env.PRIVATE_KEY;
-  const provider = new providers.AlchemyProvider(
-    +(process.env.CHAIN_ID + ""),
-    process.env.ALCHEMY_KEY
-  );
+  const provider = new ethers.providers.JsonRpcProvider(process.env.RPC);
+  // const provider = new providers.AlchemyProvider(
+  //   +(process.env.CHAIN_ID + ""),
+  //   process.env.ALCHEMY_KEY
+  // );
 
   let wallet: Wallet | undefined;
   if (!pk) {
@@ -75,7 +76,11 @@ const main = async (): Promise<any> => {
 
   for (let i = 0; i < protocols.length; i++) {
     const protocol = protocols[i];
-    const { adapter, fetcher, morpho } = await initializers[protocol](provider);
+    const {
+      adapter,
+      fetcher,
+      pool: morpho,
+    } = await initializers[protocol](provider);
 
     let liquidationHandler: ILiquidationHandler;
     if (useFlashLiquidator) {
