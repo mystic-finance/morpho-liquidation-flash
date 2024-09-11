@@ -31,8 +31,8 @@ function runCommand(command, args) {
 
 async function main() {
   try {
-    console.log("Running npm install...");
-    await runCommand(npmCmd, ["install", "--force"]);
+    // console.log("Running npm install...");
+    // await runCommand(npmCmd, ["install", "--force"]);
 
     console.log("Running npm run start:bot...");
     await runCommand(npmCmd, ["run", "start:bot"]);
