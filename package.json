@@ -18,7 +18,10 @@
     "build:bot": "npm run compile && tsc",
     "start:bot": "npm run build:bot && tsc && ts-node scripts/runBot.ts",
     "start": "node start.js",
-    "new:deployment": "az webapp deployment source config-local-git --name morpho-liquidation --resource-group cronos_tracker"
+    "new:deployment": "az webapp deployment source config-local-git --name morpho-liquidation --resource-group cronos_tracker",
+    "deploy": "git push azure main",
+    "service:new": "az appservice plan create --name myAppServicePlan --resource-group cronos_tracker --sku B1",
+    "app:new": "az webapp create --name morpho-liquidation --resource-group cronos_tracker --plan myAppServicePlan"
   },
   "dependencies": {
     "@aave/core-v3": "^1.19.3",
