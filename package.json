@@ -10,12 +10,14 @@
   "license": "MIT",
   "scripts": {
     "test": "yarn hardhat test",
-    "run:bot": "yarn build:bot && ts-node scripts/runBot.ts",
+    "run:bot": "npm run build:bot && tsc && ts-node scripts/runBot.ts",
     "run:bot:fast": "tsc && ts-node scripts/runBot.ts",
     "lint:fix": "npx prettier '**/*.{json,sol,md,ts}' --write",
     "deploy:contracts": "hardhat run scripts/deploy.ts --network custom",
-    "compile": "yarn hardhat compile",
-    "build:bot": "yarn compile && tsc"
+    "compile": "hardhat compile",
+    "build:bot": "npm run compile && tsc",
+    "start": "npm install && npm run run:bot",
+    "new:deployment": "az webapp deployment source config-local-git --name morpho-liquidation --resource-group cronos_tracker"
   },
   "dependencies": {
     "@aave/core-v3": "^1.19.3",

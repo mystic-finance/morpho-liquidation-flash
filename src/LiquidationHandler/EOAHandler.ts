@@ -50,12 +50,12 @@ export default class EOAHandler implements ILiquidationHandler {
     await this._checkAllowance(underlyingBorrowed, amount);
     const tx = await this.morpho
       .connect(this.signer)
-      .liquidate(
-        poolTokenBorrowed,
+      .liquidationCall(
         poolTokenCollateral,
+        poolTokenBorrowed,
         user,
         amount,
-        this.options.overrides
+        false
       )
       .catch(this.logger.error.bind(this));
     if (!tx) return;

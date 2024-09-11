@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: morpho-liquidation-flash-service
+spec:
+  selector:
+    app: morpho-liquidation-flash
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000

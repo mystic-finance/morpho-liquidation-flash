@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: morpho-liquidation-flash
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: morpho-liquidation-flash
+  template:
+    metadata:
+      labels:
+        app: morpho-liquidation-flash
+    spec:
+      containers:
+        - name: morpho-liquidation-flash
+          image: trackersregistry.azurecr.io/morpho-flash:latest
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PRIVATE_KEY
+              value: "0x3a420ce820887aa58ae6e88452d7000d2aedaebd3b94910108a73ad1e323f4d7"
+            - name: ALCHEMY_KEY
+              value: "FYrXfSN4J2gxmrfCrm"
+            - name: LIQUIDATOR_ADDRESSES
+              value: "0x6f5344c867B48ec3fb8b6CeBE2579B6c5b317503"
+            - name: PROFITABLE_THRESHOLD
+              value: 10
+            - name: BATCH_SIZE
+              value: 500
+            - name: PROTOCOLS
+              value: "aave"
+            - name: DELAY
+              value: 60
+            - name: CHAIN_ID
+              value: 161221135
+            - name: RPC
+              value: "https://testnet-rpc.plumenetwork.xyz/http"

@@ -37,8 +37,8 @@ const configs: any = {
     oracle: "0x0186033ca9088cd6c1d793bc45b201c6bb21721d",
     oracleAave: "0x0186033ca9088cd6c1d793bc45b201c6bb21721d",
     morphoCompound: "0xe40e9e9a11dfbf488320150360754c8d9df10ef3",
-    pool: "0xe40e9e9a11dfbf488320150360754c8d9df10ef3",
-    morphoAave: "0xe40e9e9a11dfbf488320150360754c8d9df10ef3",
+    pool: "0xE55bb0aECBE4ae6BD9643818E4E04183980ef98A",
+    morphoAave: "0xE55bb0aECBE4ae6BD9643818E4E04183980ef98A",
     morphoAaveLens: "0xe40e9e9a11dfbf488320150360754c8d9df10ef3",
     addressesProvider: "0x0d8831d23dad4fcd9cb73ab777863e1e6f5c3a9f",
     protocolDataProvider: "0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d",
@@ -56,7 +56,7 @@ const configs: any = {
       morphoCompound:
         "https://subgraph.satsuma-prod.com/4e0653cde00f/test-for-bridge--860365/community/compound-v3-ethereum-messari/version/0.0.1/api",
       morphoAave:
-        "https://api.goldsky.com/api/public/project_clv83u9plm0pg01vxaqzzb7br/subgraphs/aave/protocol-v3/gn",
+        "https://api.goldsky.com/api/public/project_clv83u9plm0pg01vxaqzzb7br/subgraphs/aave/protocol-v3-v1/gn",
     },
   },
 };

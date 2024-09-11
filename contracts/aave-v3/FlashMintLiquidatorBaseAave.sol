@@ -226,3 +226,7 @@ abstract contract FlashMintLiquidatorBaseAave is
         underlying_ = ERC20(IAToken(_poolToken).UNDERLYING_ASSET_ADDRESS());
     }
 }
+
+// add optional swap for non popular asset tokens after popular flashloan
+// add optional calldata for no integratable uniswap swaps
+// add optional swap/redeem for seized tokens maybe calldata?
