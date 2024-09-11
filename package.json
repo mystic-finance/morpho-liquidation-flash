@@ -16,7 +16,7 @@
     "deploy:contracts": "hardhat run scripts/deploy.ts --network custom",
     "compile": "hardhat compile",
     "build:bot": "npm run compile && tsc",
-    "start": "npm run run:bot",
+    "start": "npm run build:bot && tsc && ts-node scripts/runBot.ts",
     "new:deployment": "az webapp deployment source config-local-git --name morpho-liquidation --resource-group cronos_tracker"
   },
   "dependencies": {
