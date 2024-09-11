@@ -32,7 +32,7 @@ function runCommand(command, args) {
 async function main() {
   try {
     console.log("Running npm install...");
-    await runCommand(npmCmd, ["install"]);
+    await runCommand(npmCmd, ["install", "--legacy-peer-deps"]);
 
     console.log("Running npm run start:bot...");
     await runCommand(npmCmd, ["run", "start:bot"]);
