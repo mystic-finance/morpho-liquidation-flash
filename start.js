@@ -1,10 +1,18 @@
-const { exec } = require("child_process");
+const { spawn } = require("child_process");
+const path = require("path");
 
-exec("npm run started", (error, stdout, stderr) => {
-  if (error) {
-    console.error(`exec error: ${error}`);
-    return;
-  }
-  console.log(`stdout: ${stdout}`);
-  console.error(`stderr: ${stderr}`);
+const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+
+const child = spawn(npmCmd, ["run", "start:bot"], {
+  cwd: path.resolve(__dirname),
+  stdio: "inherit",
+  shell: true,
+});
+
+child.on("close", (code) => {
+  console.log(`Child process exited with code ${code}`);
+});
+
+child.on("error", (err) => {
+  console.error("Failed to start child process.", err);
 });
