@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GNU AGPLv3
 pragma solidity 0.8.13;
 
-import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
+import {SwapController} from "./SwapController.sol";
 import "./FlashMintLiquidatorBaseAave.sol";
 
 contract FlashMintLiquidatorBorrowRepayAave is FlashMintLiquidatorBaseAave {
@@ -18,17 +18,16 @@ contract FlashMintLiquidatorBorrowRepayAave is FlashMintLiquidatorBaseAave {
         uint256 amountOut
     );
 
-    ISwapRouter public immutable uniswapV3Router;
+    SwapController public immutable swapController;
 
     constructor(
         IERC3156FlashLender _lender,
-        ISwapRouter _uniswapV3Router,
+        SwapController _swapController,
         ILendingPoolAddressesProvider _addressesProvider,
-        // IMorpho _morpho,
         IAToken _aDai,
         uint256 _slippageTolerance
     ) FlashMintLiquidatorBaseAave(_lender, _addressesProvider, _aDai) {
-        uniswapV3Router = _uniswapV3Router;
+        swapController = _swapController;
         slippageTolerance = _slippageTolerance;
         emit SlippageToleranceSet(_slippageTolerance);
     }
@@ -45,7 +44,7 @@ contract FlashMintLiquidatorBorrowRepayAave is FlashMintLiquidatorBaseAave {
         address _borrower,
         uint256 _repayAmount,
         bool _stakeTokens,
-        bytes memory _path
+        bytes memory _path // Will now contain additional swap parameters
     ) external nonReentrant onlyLiquidator {
         LiquidateParams memory liquidateParams = LiquidateParams(
             _getUnderlying(_poolTokenCollateralAddress),
@@ -94,6 +93,24 @@ contract FlashMintLiquidatorBorrowRepayAave is FlashMintLiquidatorBaseAave {
         return FLASHLOAN_CALLBACK;
     }
 
+    function executeOperation(
+        address[] memory tokens,
+        uint256[] memory _amounts,
+        uint256[] memory _feeAmounts,
+        address borrower,
+        bytes calldata data
+    ) external returns (bytes32) {
+        uint256 _amount = _amounts[0];
+        uint256 _feeAmount = _feeAmounts[0];
+        if (msg.sender != address(lender)) revert UnknownLender();
+        // if (_initiator != address(this)) revert UnknownInitiator();
+        FlashLoanParams memory flashLoanParams = _decodeData(data);
+
+        _flashLoanInternal(flashLoanParams, _amount);
+        dai.safeTransfer(address(lender), _amount + _feeAmount);
+        return FLASHLOAN_CALLBACK;
+    }
+
     /// @dev ERC-3156 Flash loan callback for Balancer
     function receiveFlashLoan(
         address[] memory tokens,
@@ -139,8 +156,7 @@ contract FlashMintLiquidatorBorrowRepayAave is FlashMintLiquidatorBaseAave {
         uint256 seized = _liquidateInternal(liquidateParams);
 
         if (_flashLoanParams.borrowedUnderlying != _flashLoanParams.collateralUnderlying) {
-            // need a swap
-            // we use aave oracle
+            // Calculate max input for swap based on Aave oracle
             IPriceOracleGetter oracle = IPriceOracleGetter(addressesProvider.getPriceOracle());
             uint256 maxIn = (((_flashLoanParams.toLiquidate *
                 10**liquidateParams.collateralUnderlying.decimals() *
@@ -149,13 +165,20 @@ contract FlashMintLiquidatorBorrowRepayAave is FlashMintLiquidatorBaseAave {
                 10**liquidateParams.borrowedUnderlying.decimals()) *
                 (BASIS_POINTS + slippageTolerance)) / BASIS_POINTS;
 
+            // Decode the path to get swap parameters
+            (address tokenIn, address tokenOut, uint24 poolFee) = abi.decode(
+                _flashLoanParams.path,
+                (address, address, uint24)
+            );
+
             ERC20(_flashLoanParams.collateralUnderlying).safeApprove(
-                address(uniswapV3Router),
+                address(swapController),
                 maxIn
             );
 
-            _doSecondSwap(_flashLoanParams.path, _flashLoanParams.toLiquidate, maxIn);
+            _doSecondSwap(tokenIn, tokenOut, maxIn, _flashLoanParams.toLiquidate, poolFee);
         }
+
         if (_flashLoanParams.borrowedUnderlying != address(dai)) {
             ERC20(_flashLoanParams.borrowedUnderlying).safeApprove(
                 address(lendingPool),
@@ -182,12 +205,16 @@ contract FlashMintLiquidatorBorrowRepayAave is FlashMintLiquidatorBaseAave {
     }
 
     function _doSecondSwap(
-        bytes memory _path,
-        uint256 _amount,
-        uint256 _maxIn
+        address tokenIn,
+        address tokenOut,
+        uint256 maxIn,
+        uint256 amountOut,
+        uint24 poolFee
     ) internal returns (uint256 amountIn) {
-        amountIn = uniswapV3Router.exactOutput(
-            ISwapRouter.ExactOutputParams(_path, address(this), block.timestamp, _amount, _maxIn)
-        );
+        uint256 amountOutMinimum = (amountOut * (BASIS_POINTS - slippageTolerance)) / BASIS_POINTS;
+
+        amountIn = swapController.swap(tokenIn, tokenOut, maxIn, amountOutMinimum, poolFee);
+
+        emit Swapped(tokenIn, tokenOut, maxIn, amountIn);
     }
 }

@@ -59,6 +59,77 @@ const configs: any = {
         "https://api.goldsky.com/api/public/project_clv83u9plm0pg01vxaqzzb7br/subgraphs/aave/protocol-v3-v1/gn",
     },
   },
+
+  98864: {
+    aToken: "0xaf6f5dabc2446de5469d19a19c2f2224729f7e1a",
+    liquidator: "",
+    // oracle: "0x0186033ca9088cd6c1d793bc45b201c6bb21721d",
+    // oracleAave: "0x0186033ca9088cd6c1d793bc45b201c6bb21721d",
+    // morphoCompound: "0xe40e9e9a11dfbf488320150360754c8d9df10ef3",
+    pool: "0xd7ecf5312aa4FE7ddcAAFba779494fBC5f5f459A",
+    aave: "0xd7ecf5312aa4FE7ddcAAFba779494fBC5f5f459A",
+    // morphoAaveLens: "0xe40e9e9a11dfbf488320150360754c8d9df10ef3",
+    addressesProvider: "0x36Ded1E98d43a74679eF43589c59DBE34AdDc80c",
+    protocolDataProvider: "0x83d2014637a5e316211b6dEF5D4904B1F4B51523",
+    // lens: "0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d",
+    univ3Router: "0x2646b8a4d8fF94264c2F68843FA472f3dFD8DE7c", // https://etherscan.io/address/0xe592427a0aece92de3edee1f18e0157c05861564
+    lender: "0xd7ecf5312aa4FE7ddcAAFba779494fBC5f5f459A", // https://etherscan.io/address/0x60744434d6339a6b27d73d9eda62b6f66a0a04fa#code
+    slippageTolerance: BigNumber.from("500"), // 5%
+    tokens: {
+      dai: {
+        //pusd
+        aToken: "0x5507878b33C06EfD1ed0c1eB712EEd52fa99E658",
+        address: "0xe644F07B1316f28a7F134998e021eA9f7135F351",
+        balanceOfStorageSlot: 2,
+        decimals: 6,
+      },
+    },
+    swapFees: {
+      exotic: 3000,
+      classic: 500,
+      stable: 100,
+    },
+    graphUrl: {
+      aave: "https://api.goldsky.com/api/public/project_clv83u9plm0pg01vxaqzzb7br/subgraphs/aave/protocol-v3-v1/gn",
+      // "https://api.goldsky.com/api/public/project_clv83u9plm0pg01vxaqzzb7br/subgraphs/aave/protocol-v3-v1/gn",
+    },
+  },
+
+  //TODO: update
+  98865: {
+    aToken: "0xaf6f5dabc2446de5469d19a19c2f2224729f7e1a",
+    liquidator: "",
+    // oracle: "0x0186033ca9088cd6c1d793bc45b201c6bb21721d",
+    // oracleAave: "0x0186033ca9088cd6c1d793bc45b201c6bb21721d",
+    // morphoCompound: "0xe40e9e9a11dfbf488320150360754c8d9df10ef3",
+    pool: "0xd7ecf5312aa4FE7ddcAAFba779494fBC5f5f459A",
+    aave: "0xd7ecf5312aa4FE7ddcAAFba779494fBC5f5f459A",
+    // morphoAaveLens: "0xe40e9e9a11dfbf488320150360754c8d9df10ef3",
+    addressesProvider: "0x36Ded1E98d43a74679eF43589c59DBE34AdDc80c",
+    protocolDataProvider: "0x83d2014637a5e316211b6dEF5D4904B1F4B51523",
+    // lens: "0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d",
+    univ3Router: "0x2646b8a4d8fF94264c2F68843FA472f3dFD8DE7c", // https://etherscan.io/address/0xe592427a0aece92de3edee1f18e0157c05861564
+    lender: "0xd7ecf5312aa4FE7ddcAAFba779494fBC5f5f459A", // https://etherscan.io/address/0x60744434d6339a6b27d73d9eda62b6f66a0a04fa#code
+    slippageTolerance: BigNumber.from("500"), // 5%
+    tokens: {
+      dai: {
+        //pusd
+        aToken: "0x5507878b33C06EfD1ed0c1eB712EEd52fa99E658",
+        address: "0xe644F07B1316f28a7F134998e021eA9f7135F351",
+        balanceOfStorageSlot: 2,
+        decimals: 6,
+      },
+    },
+    swapFees: {
+      exotic: 3000,
+      classic: 500,
+      stable: 100,
+    },
+    graphUrl: {
+      aave: "https://api.goldsky.com/api/public/project_clv83u9plm0pg01vxaqzzb7br/subgraphs/aave/protocol-v3-v1/gn",
+      // "https://api.goldsky.com/api/public/project_clv83u9plm0pg01vxaqzzb7br/subgraphs/aave/protocol-v3-v1/gn",
+    },
+  },
 };
 
 export default configs[process.env.CHAIN_ID || 1];

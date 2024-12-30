@@ -131,16 +131,16 @@ export const setupToken = async (
         await acc.getAddress(),
         config.balanceOfStorageSlot
       );
-      await hre.ethers.provider.send("hardhat_setStorageAt", [
-        token.address,
-        cropHexString(balanceOfUserStorageSlot),
-        padHexString(amountToFill.toHexString()),
-      ]);
+      // await hre.ethers.provider.send("hardhat_setStorageAt", [
+      //   token.address,
+      //   cropHexString(balanceOfUserStorageSlot),
+      //   padHexString(amountToFill.toHexString()),
+      // ]);
     })
   );
   return {
     token,
-    cToken: ICToken__factory.connect(config.cToken, owner),
+    // cToken: ICToken__factory.connect(config.cToken, owner),
     aToken: IAToken__factory.connect(config.aToken, owner),
   };
 };
