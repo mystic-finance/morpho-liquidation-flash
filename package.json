@@ -21,7 +21,9 @@
     "new:deployment": "az webapp deployment source config-local-git --name morpho-liquidation --resource-group cronos_tracker",
     "deploy": "git push azure main",
     "service:new": "az appservice plan create --name myAppServicePlan --resource-group cronos_tracker --sku B1",
-    "app:new": "az webapp create --name morpho-liquidation --resource-group cronos_tracker --plan myAppServicePlan"
+    "app:new": "az webapp create --name morpho-liquidation --resource-group cronos_tracker --plan myAppServicePlan",
+    "run:deploy:controller": "npx hardhat run scripts/deploy-controller.ts --network plumeDevnet",
+    "run:deploy:bot": "npx hardhat run scripts/deploy.ts --network plumeDevnet"
   },
   "dependencies": {
     "@aave/core-v3": "^1.19.3",

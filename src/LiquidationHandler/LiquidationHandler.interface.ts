@@ -3,11 +3,19 @@ import { BigNumber, BigNumberish } from "ethers";
 export interface LiquidationParams {
   poolTokenBorrowed: string;
   poolTokenCollateral: string;
-  underlyingBorrowed: string;
+  underlyingBorrowed?: string;
   user: string;
   amount: BigNumberish;
   swapPath: string;
 }
+
+// export interface LiquidationParams {
+//   poolTokenCollateral: string;
+//   poolTokenBorrowed: string;
+//   user: string;
+//   amount: BigNumber;
+//   swapPath: string; // Will be modified based on swapper requirements
+// }
 
 export interface MarketLiquidationParams {
   market: string;
@@ -27,4 +35,5 @@ export interface UserLiquidationParams {
 }
 export interface ILiquidationHandler {
   handleLiquidation: (liquidation: LiquidationParams) => Promise<void>;
+  estimateGas(params: LiquidationParams): Promise<BigNumber>;
 }

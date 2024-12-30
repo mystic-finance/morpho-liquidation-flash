@@ -14,7 +14,7 @@ import Pool from "@aave/core-v3/artifacts/contracts/protocol/pool/Pool.sol/Pool.
 
 const initAave = async (provider: providers.Provider) => {
   const fetcher = new AaveGraphFetcher(
-    config.graphUrl.morphoAave,
+    config.graphUrl.aave,
     +(process.env.BATCH_SIZE ?? "500")
   );
 
@@ -25,16 +25,14 @@ const initAave = async (provider: providers.Provider) => {
   //   provider as any
   // );
   // fetch aave V2 oracle
-  const morpho = MorphoAaveV2__factory.connect(
-    config.morphoAave,
-    provider as any
-  );
+
   // const lendingPool = LendingPool__factory.connect(
   //   config.pool,
   //   provider as any
   // );
+  // console.log(pool.address, provider);
   const addressesProvider = ILendingPoolAddressesProvider__factory.connect(
-    await pool.ADDRESSES_PROVIDER(),
+    process.env.ADDRESSES_PROVIDER as string,
     provider as any
   );
   const oracle = AavePriceOracle__factory.connect(

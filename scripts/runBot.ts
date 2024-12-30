@@ -104,6 +104,7 @@ const main = async (): Promise<any> => {
       provider,
       liquidationHandler,
       adapter,
+      process.env.SWAP_CONTROLLER as string,
       {
         profitableThresholdUSD: parseUnits(
           process.env.PROFITABLE_THRESHOLD ?? "100"

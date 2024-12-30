@@ -6,8 +6,11 @@ import "@nomiclabs/hardhat-waffle";
 import "@typechain/hardhat";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
+// import "@nomicfoundation/hardhat-toolbox";
+// import "@nomicfoundation/hardhat-ethers";
 
 dotenv.config();
+
 const mainnetUrl = `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_KEY}`;
 const config: HardhatUserConfig = {
   solidity: "0.8.13",
@@ -28,6 +31,28 @@ const config: HardhatUserConfig = {
     custom: {
       url: process.env.RPC,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+    },
+    plumeDevnet: {
+      url: process.env.PLUME_DEVNET,
+      chainId: 98864,
+      accounts: process.env.PRIVATE_KEY
+        ? [
+            process.env.PRIVATE_KEY,
+            process.env.PRIVATE_KEY,
+            process.env.PRIVATE_KEY,
+          ]
+        : [],
+    },
+    plume: {
+      url: process.env.PLUME_MAINNET,
+      chainId: 98865,
+      accounts: process.env.PRIVATE_KEY
+        ? [
+            process.env.PRIVATE_KEY,
+            process.env.PRIVATE_KEY,
+            process.env.PRIVATE_KEY,
+          ]
+        : [],
     },
   },
   gasReporter: {

@@ -10,11 +10,10 @@ const contractsNames: Record<string, string> = {
 };
 const params: Record<string, any[]> = {
   aave: [
-    config.lender,
-    config.univ3Router,
-    config.addressesProvider,
-    // config.morphoAave,
-    config.aToken,
+    "0xd7ecf5312aa4FE7ddcAAFba779494fBC5f5f459A",
+    "0x2646b8a4d8fF94264c2F68843FA472f3dFD8DE7c",
+    "0x36Ded1E98d43a74679eF43589c59DBE34AdDc80c",
+    "0x5507878b33C06EfD1ed0c1eB712EEd52fa99E658",
     config.slippageTolerance,
   ],
   compound: [
@@ -26,11 +25,18 @@ const params: Record<string, any[]> = {
   ],
 };
 
+// IERC3156FlashLender _lender,
+//         SwapController _swapController,
+//         ILendingPoolAddressesProvider _addressesProvider,
+//         IAToken _aDai,
+//         uint256 _slippageTolerance
+
 async function main() {
   // const [signer] = await ethers.getSigners();
-  const provider = new ethers.providers.JsonRpcProvider(process.env.RPC);
+  const provider = new ethers.providers.JsonRpcProvider(
+    process.env.PLUME_DEVNET
+  );
   const signer = new ethers.Wallet(process.env.PRIVATE_KEY as string, provider);
-  console.log(process.env.PRIVATE_KEY);
   console.log("signer", signer.address);
 
   // Check protocols
@@ -67,3 +73,5 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
+
+// liquidator 0x53cf36Ffb753c1873534bE2afa0238048E399f91

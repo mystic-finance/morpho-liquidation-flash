@@ -25,4 +25,12 @@ interface IERC3156FlashBorrower {
         uint256[] memory _feeAmounts,
         bytes calldata data
     ) external returns (bytes32);
+
+    function executeOperation(
+        address[] memory tokens,
+        uint256[] memory _amounts,
+        uint256[] memory _feeAmounts,
+        address borrower,
+        bytes calldata data
+    ) external returns (bytes32);
 }
