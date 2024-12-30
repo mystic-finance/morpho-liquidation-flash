@@ -34,6 +34,7 @@ export const handler = async () => {
     signer.provider,
     liquidationHandler,
     adapter,
+    process.env.SWAP_CONTROLLER as string,
     {
       profitableThresholdUSD: parseUnits(
         process.env.PROFITABLE_THRESHOLD ?? "1"

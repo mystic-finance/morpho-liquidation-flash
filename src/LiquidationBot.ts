@@ -1,12 +1,8 @@
-import { BigNumber, providers } from "ethers";
+import { BigNumber, providers, Contract } from "ethers";
 import { Logger } from "./interfaces/logger";
 import { IAaveFetcher, IFetcher } from "./interfaces/IFetcher";
 import { formatUnits, parseUnits } from "ethers/lib/utils";
-import stablecoins from "./constant/stablecoins";
 import { ethers } from "hardhat";
-import config from "../config";
-import underlyings from "./constant/underlyings";
-import { getPoolData, UniswapPool } from "./uniswap/pools";
 import { IMorphoAdapter } from "./morpho/Morpho.interface";
 import {
   ILiquidationHandler,
@@ -14,21 +10,49 @@ import {
   UserLiquidationParams,
 } from "./LiquidationHandler/LiquidationHandler.interface";
 import { PercentMath } from "@morpho-labs/ethers-utils/lib/maths";
+import config from "../config";
+
+// Ambient SwapController interface
+interface ISwapController {
+  swap(
+    tokenIn: string,
+    tokenOut: string,
+    amountIn: BigNumber,
+    amountOutMinimum: BigNumber,
+    poolFee: number
+  ): Promise<BigNumber>;
+
+  getQuote(
+    tokenIn: string,
+    tokenOut: string,
+    amountIn: BigNumber,
+    poolFee: number
+  ): Promise<BigNumber>;
+}
 
 export interface LiquidationBotSettings {
   profitableThresholdUSD: BigNumber;
   batchSize: number;
+  minHealthFactor: BigNumber;
+  maxHealthFactor: BigNumber;
+  gasPrice: BigNumber;
+  slippageTolerance: number; // e.g., 0.005 for 0.5%
+  defaultPoolFee: number; // e.g., 3000 for 0.3%
 }
+
 const defaultSettings: LiquidationBotSettings = {
   profitableThresholdUSD: parseUnits("1"),
   batchSize: 15,
+  minHealthFactor: parseUnits("0.01"),
+  maxHealthFactor: parseUnits("1"),
+  gasPrice: parseUnits("50", "gwei"),
+  slippageTolerance: 0.005, // 0.5%
+  defaultPoolFee: 3000, // 0.3%
 };
 
 export default class LiquidationBot {
-  static W_ETH =
-    process.env.WETH ||
-    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".toLowerCase();
-  markets: string[] = [];
+  private swapController: Contract;
+  private markets: string[] = [];
   static readonly HF_THRESHOLD = parseUnits("1");
   settings: LiquidationBotSettings = defaultSettings;
   constructor(
@@ -37,75 +61,98 @@ export default class LiquidationBot {
     public readonly provider: providers.Provider,
     public readonly liquidationHandler: ILiquidationHandler,
     public readonly adapter: IMorphoAdapter,
+    public readonly swapControllerAddress: string,
     settings: Partial<LiquidationBotSettings> = {}
   ) {
     this.settings = { ...defaultSettings, ...settings };
+
+    // Initialize SwapController contract
+    const swapControllerAbi = [
+      "function swap(address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOutMinimum, uint24 poolFee) external returns (uint256)",
+      "function getQuote(address tokenIn, address tokenOut, uint256 amountIn, uint24 poolFee) external view returns (uint256)",
+    ];
+    this.swapController = new Contract(
+      swapControllerAddress,
+      swapControllerAbi,
+      provider
+    );
   }
 
   async computeLiquidableUsers() {
     let lastId = "";
     let hasMore = true;
     let liquidableUsers: { address: string; hf: BigNumber }[] = [];
+
     while (hasMore) {
-      let users: string[];
-      ({ hasMore, lastId, users } = await this.fetcher.fetchUsers(lastId));
-      this.logger.log(`${users.length} users fetched`);
+      const {
+        hasMore: more,
+        lastId: newLastId,
+        users,
+      } = await this.fetcher.fetchUsers(lastId);
+      hasMore = more;
+      lastId = newLastId;
+
+      this.logger.log(`Fetched ${users.length} users`);
+
       const newLiquidatableUsers = await Promise.all(
         users.map(async (userAddress) => ({
           address: userAddress,
           hf: await this.adapter.getUserHealthFactor(userAddress),
         }))
-      ).then((healthFactors) =>
-        healthFactors.filter((userHf) => {
-          if (
-            userHf.hf.lt(parseUnits("0.65")) &&
-            userHf.hf.gt(parseUnits("0.01"))
-          )
-            this.logger.log(
-              `User ${userHf.address} has a low HF (${formatUnits(userHf.hf)})`
-            );
-          return userHf.hf.lt(LiquidationBot.HF_THRESHOLD);
-        })
       );
-      liquidableUsers = [...liquidableUsers, ...newLiquidatableUsers];
-      this.delay(100);
-      // hasMore = false;
+
+      const filteredUsers = newLiquidatableUsers.filter((userHf) => {
+        const isLiquidatable =
+          userHf.hf.lt(this.settings.maxHealthFactor) &&
+          userHf.hf.gt(this.settings.minHealthFactor);
+
+        if (isLiquidatable) {
+          this.logger.log(
+            `User ${userHf.address} has HF: ${formatUnits(userHf.hf)}`
+          );
+        }
+        return isLiquidatable;
+      });
+
+      liquidableUsers = [...liquidableUsers, ...filteredUsers];
+      await this.delay(100);
     }
-    console.log(liquidableUsers.length);
+
     return liquidableUsers;
   }
 
-  async computeMarkets() {
-    // let lastId = "";
-    // let hasMore = true;
-    let markets = await this.fetcher.fetchMarkets?.();
+  private async computeMarkets() {
+    const markets = await this.fetcher.fetchMarkets?.();
     this.logger.log(`${markets?.markets?.length} markets fetched`);
-
-    const activeMarkets = markets?.markets as string[];
-
-    return activeMarkets;
+    return (markets?.markets as string[]) || [];
   }
 
-  delay(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private async getExpectedOutput(
+    tokenIn: string,
+    tokenOut: string,
+    amountIn: BigNumber
+  ): Promise<BigNumber> {
+    try {
+      return await this.swapController.getQuote(
+        tokenIn,
+        tokenOut,
+        amountIn,
+        this.settings.defaultPoolFee
+      );
+    } catch (error) {
+      this.logError(`Failed to get quote: ${error}`);
+      return BigNumber.from(0);
+    }
   }
 
-  async liquidate(
-    poolTokenBorrowed: string,
-    poolTokenCollateral: string,
-    user: string,
-    amount: BigNumber,
-    swapPath: string
-  ) {
-    const liquidationParams: LiquidationParams = {
-      poolTokenBorrowed,
-      poolTokenCollateral,
-      underlyingBorrowed: underlyings[poolTokenBorrowed.toLowerCase()],
-      user,
-      amount,
-      swapPath,
-    };
-    return this.liquidationHandler.handleLiquidation(liquidationParams);
+  private calculateMinimumOutput(expectedOutput: BigNumber): BigNumber {
+    return expectedOutput
+      .mul(
+        BigNumber.from(
+          Math.floor((1 - this.settings.slippageTolerance) * 10000)
+        )
+      )
+      .div(10000);
   }
 
   async getUserLiquidationParams(userAddress: string, markets: string[] = []) {
@@ -182,160 +229,504 @@ export default class LiquidationBot {
     borrowMarket = borrowMarket.toLowerCase();
     collateralMarket = collateralMarket.toLowerCase();
     if (borrowMarket === collateralMarket) return "0x";
-    if (
-      [underlyings[borrowMarket], underlyings[collateralMarket]].includes(
-        LiquidationBot.W_ETH
-      )
-    ) {
-      // a simple swap with wEth
-      return ethers.utils.solidityPack(
-        ["address", "uint24", "address"],
-        [
-          underlyings[borrowMarket],
-          config.swapFees.classic,
-          underlyings[collateralMarket],
-        ]
-      );
-    }
-    if (
-      stablecoins.includes(borrowMarket) &&
-      stablecoins.includes(collateralMarket)
-    )
-      return ethers.utils.solidityPack(
-        ["address", "uint24", "address"],
-        [
-          underlyings[borrowMarket],
-          config.swapFees.stable,
-          underlyings[collateralMarket],
-        ]
-      );
     return ethers.utils.solidityPack(
-      ["address", "uint24", "address", "uint24", "address"],
-      [
-        underlyings[borrowMarket],
-        config.swapFees.exotic,
-        LiquidationBot.W_ETH,
-        config.swapFees.exotic,
-        underlyings[collateralMarket],
-      ]
+      ["address", "uint24", "address"],
+      [borrowMarket, collateralMarket, config.swapFees.classic]
     );
   }
 
-  async isProfitable(market: string, toLiquidate: BigNumber, price: BigNumber) {
-    const rewards = await this.adapter.getLiquidationBonus(market);
-    const usdAmount = await this.adapter.toUsd(market, toLiquidate, price);
-    return PercentMath.percentMul(
-      usdAmount,
-      rewards.sub(PercentMath.BASE_PERCENT)
-    ).gt(this.settings.profitableThresholdUSD);
-  }
-
-  async checkPoolLiquidity(borrowMarket: string, collateralMarket: string) {
-    borrowMarket = borrowMarket.toLowerCase();
-    collateralMarket = collateralMarket.toLowerCase();
-    let pools: UniswapPool[][] = [];
-    if (
-      stablecoins.includes(borrowMarket) &&
-      stablecoins.includes(collateralMarket)
-    ) {
-      const data = await getPoolData(
-        underlyings[borrowMarket],
-        underlyings[collateralMarket]
-      );
-      pools.push(data);
-    } else if (
-      [underlyings[borrowMarket], underlyings[collateralMarket]].includes(
-        LiquidationBot.W_ETH
-      )
-    ) {
-      const data = await getPoolData(
-        underlyings[borrowMarket],
-        underlyings[collateralMarket]
-      );
-      pools.push(data);
-    } else {
-      const newPools = await Promise.all([
-        getPoolData(underlyings[borrowMarket], LiquidationBot.W_ETH),
-        getPoolData(underlyings[collateralMarket], LiquidationBot.W_ETH),
-      ]);
-      pools = [...pools, ...newPools];
-    }
-    console.log(JSON.stringify(pools, null, 4));
-    return pools;
-  }
-
-  // async amountAndPathsForMultipleLiquidations(
-  //   borrowMarket: string,
-  //   collateralMarket: string
-  // ) {
-  //   const borrowUnderlying = underlyings[borrowMarket.toLowerCase()];
-  //   const collateralUnderlying = underlyings[collateralMarket.toLowerCase()];
-  //   const pools = await this.checkPoolLiquidity(borrowMarket, collateralMarket);
-  //   console.log(pools);
-  //   if (pools.length === 1) {
-  //     // stable/stable or stable/eth swap
-  //     const [oneSwapPools] = pools;
+  // async checkPoolLiquidity(borrowMarket: string, collateralMarket: string) {
+  //   borrowMarket = borrowMarket.toLowerCase();
+  //   collateralMarket = collateralMarket.toLowerCase();
+  //   let pools: UniswapPool[][] = [];
+  //   if (
+  //     stablecoins.includes(borrowMarket) &&
+  //     stablecoins.includes(collateralMarket)
+  //   ) {
+  //     const data = await getPoolData(
+  //       underlyings[borrowMarket],
+  //       underlyings[collateralMarket]
+  //     );
+  //     pools.push(data);
+  //   } else if (
+  //     [underlyings[borrowMarket], underlyings[collateralMarket]].includes(
+  //       LiquidationBot.W_ETH
+  //     )
+  //   ) {
+  //     const data = await getPoolData(
+  //       underlyings[borrowMarket],
+  //       underlyings[collateralMarket]
+  //     );
+  //     pools.push(data);
+  //   } else {
+  //     const newPools = await Promise.all([
+  //       getPoolData(underlyings[borrowMarket], LiquidationBot.W_ETH),
+  //       getPoolData(underlyings[collateralMarket], LiquidationBot.W_ETH),
+  //     ]);
+  //     pools = [...pools, ...newPools];
   //   }
+  //   console.log(JSON.stringify(pools, null, 4));
+  //   return pools;
   // }
 
   async run() {
-    const users = await this.computeLiquidableUsers();
-    this.logger.log(`Found ${users.length} users liquidatable`);
-    // use the batch size to limit the number of users to liquidate
-    const toLiquidate: UserLiquidationParams[] = [];
-    const markets = await this.computeMarkets();
-    for (let i = 0; i < users.length; i += this.settings.batchSize) {
-      const liquidationsParams = await Promise.all(
-        users
-          .slice(i, Math.min(i + this.settings.batchSize, users.length))
-          .map((u) => this.getUserLiquidationParams(u.address, markets))
-      );
-      // console.log({ liquidationsParams });
+    try {
+      const users = await this.computeLiquidableUsers();
+      this.logger.log(`Found ${users.length} liquidatable users`);
 
-      const batchToLiquidate = (
-        await Promise.all(
-          liquidationsParams.map(async (user) => {
-            if (
-              await this.isProfitable(
-                user.debtMarket.market,
-                user.toLiquidate,
-                user.debtMarket.price
-              )
-            )
-              return user;
+      const markets = await this.computeMarkets();
+      const liquidationPromises = [];
+
+      for (let i = 0; i < users.length; i += this.settings.batchSize) {
+        const batch = users.slice(i, i + this.settings.batchSize);
+        const batchPromises = batch.map(async (user) => {
+          try {
+            const liquidationParams = await this.getUserLiquidationParams(
+              user.address,
+              markets
+            );
+            if (await this.isLiquidationProfitable(liquidationParams)) {
+              return this.executeLiquidation(liquidationParams);
+            }
+          } catch (error) {
+            this.logError(error);
             return null;
-          })
-        )
-      ).filter(Boolean) as UserLiquidationParams[];
-      toLiquidate.push(...batchToLiquidate);
-    }
+          }
+        });
 
-    if (toLiquidate.length > 0) {
-      this.logger.log(`${toLiquidate.length} users to liquidate`);
-      for (const userToLiquidate of toLiquidate) {
-        const swapPath = this.getPath(
-          userToLiquidate!.debtMarket.market,
-          userToLiquidate!.collateralMarket.market
-        );
-        // console.log(swapPath);
-        const liquidateParams: LiquidationParams = {
-          poolTokenBorrowed: userToLiquidate!.debtMarket.market,
-          poolTokenCollateral: userToLiquidate!.collateralMarket.market,
-          underlyingBorrowed: underlyings[userToLiquidate!.debtMarket.market],
-          user: userToLiquidate!.userAddress,
-          amount: userToLiquidate!.toLiquidate,
-          swapPath,
-        };
-        // console.log(liquidateParams);
-        console.log("here");
-        await this.liquidationHandler.handleLiquidation(liquidateParams);
-        console.log("done");
+        liquidationPromises.push(...batchPromises);
       }
+
+      await Promise.all(liquidationPromises);
+    } catch (error) {
+      this.logError(error);
     }
   }
 
-  logError(error: object) {
+  private async isLiquidationProfitable(
+    params: UserLiquidationParams
+  ): Promise<boolean> {
+    const gasEstimate = await this.estimateGas(params);
+    const gasCost = gasEstimate.mul(this.settings.gasPrice);
+
+    const expectedProfit = await this.calculateExpectedProfit(params);
+    return expectedProfit.gt(gasCost.add(this.settings.profitableThresholdUSD));
+  }
+
+  private async estimateGas(params: UserLiquidationParams): Promise<BigNumber> {
+    try {
+      const swapPath = this.getPath(
+        params.debtMarket.market,
+        params.collateralMarket.market
+      );
+
+      const liquidationParams: LiquidationParams = {
+        poolTokenBorrowed: params.debtMarket.market,
+        poolTokenCollateral: params.collateralMarket.market,
+        underlyingBorrowed: params.debtMarket.market,
+        user: params.userAddress,
+        amount: params.toLiquidate,
+        swapPath,
+      };
+
+      return await this.liquidationHandler.estimateGas(liquidationParams);
+    } catch {
+      return BigNumber.from(500000); // fallback estimate
+    }
+  }
+
+  private async calculateExpectedProfit(
+    params: UserLiquidationParams
+  ): Promise<BigNumber> {
+    const { debtMarket, collateralMarket, toLiquidate } = params;
+
+    // Get expected output from swap
+    const expectedOutput = await this.getExpectedOutput(
+      debtMarket.market,
+      collateralMarket.market,
+      toLiquidate
+    );
+
+    // Calculate profit considering liquidation bonus
+    const liquidationBonus = await this.adapter.getLiquidationBonus(
+      collateralMarket.market
+    );
+    const debtValue = await this.adapter.toUsd(
+      debtMarket.market,
+      toLiquidate,
+      debtMarket.price
+    );
+
+    return PercentMath.percentMul(
+      debtValue,
+      liquidationBonus.sub(PercentMath.BASE_PERCENT)
+    );
+  }
+
+  private async executeLiquidation(params: UserLiquidationParams) {
+    const expectedOutput = await this.getExpectedOutput(
+      params.debtMarket.market,
+      params.collateralMarket.market,
+      params.toLiquidate
+    );
+
+    const minimumOutput = this.calculateMinimumOutput(expectedOutput);
+    const swapPath = this.getPath(
+      params.debtMarket.market,
+      params.collateralMarket.market
+    );
+
+    const liquidationParams: LiquidationParams = {
+      poolTokenBorrowed: params.debtMarket.market,
+      poolTokenCollateral: params.collateralMarket.market,
+      underlyingBorrowed: params.debtMarket.market,
+      user: params.userAddress,
+      amount: params.toLiquidate,
+      swapPath,
+    };
+
+    return this.liquidationHandler.handleLiquidation(liquidationParams);
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private logError(error: unknown) {
     console.error(error);
     this.logger.log(error);
   }
 }
+
+// import { BigNumber, providers } from "ethers";
+// import { Logger } from "./interfaces/logger";
+// import { IAaveFetcher, IFetcher } from "./interfaces/IFetcher";
+// import { formatUnits, parseUnits } from "ethers/lib/utils";
+// import { ethers } from "hardhat";
+// import config from "../config";
+// import { getPoolData, UniswapPool } from "./uniswap/pools";
+// import { IMorphoAdapter } from "./morpho/Morpho.interface";
+// import {
+//   ILiquidationHandler,
+//   LiquidationParams,
+//   UserLiquidationParams,
+// } from "./LiquidationHandler/LiquidationHandler.interface";
+// import { PercentMath } from "@morpho-labs/ethers-utils/lib/maths";
+
+// // Configuration interfaces
+// interface TokenConfig {
+//   address: string;
+//   decimals: number;
+//   isStablecoin: boolean;
+// }
+
+// interface PoolConfig {
+//   fee: number;
+//   minLiquidity: BigNumber;
+// }
+
+// export interface LiquidationBotSettings {
+//   profitableThresholdUSD: BigNumber;
+//   batchSize: number;
+//   minHealthFactor: BigNumber;
+//   maxHealthFactor: BigNumber;
+//   gasPrice: BigNumber;
+// }
+
+// const defaultSettings: LiquidationBotSettings = {
+//   profitableThresholdUSD: parseUnits("1"),
+//   batchSize: 15,
+//   minHealthFactor: parseUnits("0.01"),
+//   maxHealthFactor: parseUnits("1"),
+//   gasPrice: parseUnits("50", "gwei"),
+// };
+
+// export default class LiquidationBot {
+//   private tokenList: Map<string, TokenConfig> = new Map();
+//   private poolConfigs: Map<string, PoolConfig> = new Map();
+//   private markets: string[] = [];
+//   static readonly HF_THRESHOLD = parseUnits("1");
+//   settings: LiquidationBotSettings = defaultSettings;
+//   constructor(
+//     public readonly logger: Logger,
+//     public readonly fetcher: IFetcher,
+//     public readonly provider: providers.Provider,
+//     public readonly liquidationHandler: ILiquidationHandler,
+//     public readonly adapter: IMorphoAdapter,
+//     settings: Partial<LiquidationBotSettings> = {}
+//   ) {
+//     this.settings = { ...defaultSettings, ...settings };
+//   }
+
+//   // Initialize token configurations
+//   async initializeTokens() {
+//     const markets = await this.computeMarkets();
+//     for (const market of markets) {
+//       const tokenData = await this.adapter.getTokenData(market);
+//       this.tokenList.set(market.toLowerCase(), {
+//         address: tokenData.address,
+//         decimals: tokenData.decimals,
+//         isStablecoin: tokenData.isStablecoin,
+//       });
+//     }
+//   }
+
+//   private async computeLiquidableUsers() {
+//     let lastId = "";
+//     let hasMore = true;
+//     let liquidableUsers: { address: string; hf: BigNumber }[] = [];
+
+//     while (hasMore) {
+//       const {
+//         hasMore: more,
+//         lastId: newLastId,
+//         users,
+//       } = await this.fetcher.fetchUsers(lastId);
+//       hasMore = more;
+//       lastId = newLastId;
+
+//       this.logger.log(`Fetched ${users.length} users`);
+
+//       const newLiquidatableUsers = await Promise.all(
+//         users.map(async (userAddress) => ({
+//           address: userAddress,
+//           hf: await this.adapter.getUserHealthFactor(userAddress),
+//         }))
+//       );
+
+//       const filteredUsers = newLiquidatableUsers.filter((userHf) => {
+//         const isLiquidatable =
+//           userHf.hf.lt(this.settings.maxHealthFactor) &&
+//           userHf.hf.gt(this.settings.minHealthFactor);
+
+//         if (isLiquidatable) {
+//           this.logger.log(
+//             `User ${userHf.address} has HF: ${formatUnits(userHf.hf)}`
+//           );
+//         }
+//         return isLiquidatable;
+//       });
+
+//       liquidableUsers = [...liquidableUsers, ...filteredUsers];
+//       await this.delay(100);
+//     }
+
+//     return liquidableUsers;
+//   }
+
+//   private async computeMarkets() {
+//     const markets = await this.fetcher.fetchMarkets?.();
+//     this.logger.log(`${markets?.markets?.length} markets fetched`);
+//     return (markets?.markets as string[]) || [];
+//   }
+
+//   private async generateSwapPath(
+//     borrowToken: string,
+//     collateralToken: string,
+//     amount: BigNumber
+//   ): Promise<{ path: string; expectedOutput: BigNumber }> {
+//     const borrowConfig = this.tokenList.get(borrowToken.toLowerCase());
+//     const collateralConfig = this.tokenList.get(collateralToken.toLowerCase());
+
+//     if (!borrowConfig || !collateralConfig) {
+//       throw new Error("Token config not found");
+//     }
+
+//     // Direct path for same token
+//     if (borrowToken.toLowerCase() === collateralToken.toLowerCase()) {
+//       return { path: "0x", expectedOutput: amount };
+//     }
+
+//     // Find best path considering liquidity and fees
+//     const paths = await this.findAllPossiblePaths(
+//       borrowConfig.address,
+//       collateralConfig.address,
+//       amount
+//     );
+
+//     const bestPath = await this.findBestPath(paths, amount);
+//     return bestPath;
+//   }
+
+//   private async findAllPossiblePaths(
+//     tokenIn: string,
+//     tokenOut: string,
+//     amount: BigNumber
+//   ) {
+//     // Implementation for finding all possible paths between tokens
+//     // Consider direct paths and paths through intermediate tokens
+//     // Return array of possible paths with their expected outputs
+//     // This is a simplified version - you'd want to expand this based on your needs
+//     const directPool = await getPoolData(tokenIn, tokenOut);
+//     const paths = [directPool];
+
+//     // Add paths through common intermediate tokens (like USDC, ETH, etc)
+//     const intermediateTokens = Array.from(this.tokenList.values())
+//       .filter((token) => token.isStablecoin)
+//       .map((token) => token.address);
+
+//     for (const intermediate of intermediateTokens) {
+//       if (intermediate !== tokenIn && intermediate !== tokenOut) {
+//         const firstHop = await getPoolData(tokenIn, intermediate);
+//         const secondHop = await getPoolData(intermediate, tokenOut);
+//         if (firstHop[0]?.liquidity.gt(0) && secondHop[0]?.liquidity.gt(0)) {
+//           paths.push([...firstHop, ...secondHop]);
+//         }
+//       }
+//     }
+
+//     return paths;
+//   }
+
+//   private async findBestPath(paths: UniswapPool[][], amount: BigNumber) {
+//     let bestPath = { path: "0x", expectedOutput: BigNumber.from(0) };
+//     let maxOutput = BigNumber.from(0);
+
+//     for (const path of paths) {
+//       // Calculate expected output considering slippage and fees
+//       const output = await this.calculateExpectedOutput(path, amount);
+//       if (output.gt(maxOutput)) {
+//         maxOutput = output;
+//         bestPath = {
+//           path: this.encodePath(path),
+//           expectedOutput: output,
+//         };
+//       }
+//     }
+
+//     return bestPath;
+//   }
+
+//   private encodePath(pools: UniswapPool[]): string {
+//     // Encode the path for the Uniswap router
+//     const path = pools.reduce((encoded, pool, index) => {
+//       if (index === 0) {
+//         return [pool.token0, pool.fee, pool.token1];
+//       }
+//       return [...encoded, pool.fee, pool.token1];
+//     }, [] as (string | number)[]);
+
+//     return ethers.utils.solidityPack(
+//       Array(path.length).fill((index) =>
+//         index % 2 === 0 ? "address" : "uint24"
+//       ),
+//       path
+//     );
+//   }
+
+//   private async calculateExpectedOutput(
+//     pools: UniswapPool[],
+//     amountIn: BigNumber
+//   ): Promise<BigNumber> {
+//     // Calculate expected output considering slippage and fees
+//     // This is a simplified version - you'd want to expand this
+//     let amount = amountIn;
+//     for (const pool of pools) {
+//       amount = await this.adapter.getExpectedOutput(pool, amount);
+//     }
+//     return amount;
+//   }
+
+//   async run() {
+//     try {
+//       await this.initializeTokens();
+//       const users = await this.computeLiquidableUsers();
+//       this.logger.log(`Found ${users.length} liquidatable users`);
+
+//       const markets = await this.computeMarkets();
+//       const liquidationPromises = [];
+
+//       for (let i = 0; i < users.length; i += this.settings.batchSize) {
+//         const batch = users.slice(i, i + this.settings.batchSize);
+//         const batchPromises = batch.map(async (user) => {
+//           try {
+//             const liquidationParams = await this.getUserLiquidationParams(
+//               user.address,
+//               markets
+//             );
+//             if (await this.isLiquidationProfitable(liquidationParams)) {
+//               return this.executeLiquidation(liquidationParams);
+//             }
+//           } catch (error) {
+//             this.logError(error);
+//             return null;
+//           }
+//         });
+
+//         liquidationPromises.push(...batchPromises);
+//       }
+
+//       await Promise.all(liquidationPromises);
+//     } catch (error) {
+//       this.logError(error);
+//     }
+//   }
+
+//   private async isLiquidationProfitable(
+//     params: UserLiquidationParams
+//   ): Promise<boolean> {
+//     const gasEstimate = await this.estimateGas(params);
+//     const gasCost = gasEstimate.mul(this.settings.gasPrice);
+
+//     const expectedProfit = await this.calculateExpectedProfit(params);
+//     return expectedProfit.gt(gasCost.add(this.settings.profitableThresholdUSD));
+//   }
+
+//   private async estimateGas(params: UserLiquidationParams): Promise<BigNumber> {
+//     try {
+//       return await this.liquidationHandler.estimateGas(params);
+//     } catch {
+//       return BigNumber.from(500000); // fallback estimate
+//     }
+//   }
+
+//   private async calculateExpectedProfit(
+//     params: UserLiquidationParams
+//   ): Promise<BigNumber> {
+//     const { debtMarket, collateralMarket, toLiquidate } = params;
+//     const liquidationBonus = await this.adapter.getLiquidationBonus(
+//       collateralMarket.market
+//     );
+
+//     const debtValue = await this.adapter.toUsd(
+//       debtMarket.market,
+//       toLiquidate,
+//       debtMarket.price
+//     );
+
+//     return PercentMath.percentMul(
+//       debtValue,
+//       liquidationBonus.sub(PercentMath.BASE_PERCENT)
+//     );
+//   }
+
+//   private async executeLiquidation(params: UserLiquidationParams) {
+//     const { path, expectedOutput } = await this.generateSwapPath(
+//       params.debtMarket.market,
+//       params.collateralMarket.market,
+//       params.toLiquidate
+//     );
+
+//     const liquidationParams: LiquidationParams = {
+//       poolTokenBorrowed: params.debtMarket.market,
+//       poolTokenCollateral: params.collateralMarket.market,
+//       underlyingBorrowed: this.tokenList.get(
+//         params.debtMarket.market.toLowerCase()
+//       )?.address!,
+//       user: params.userAddress,
+//       amount: params.toLiquidate,
+//       swapPath: path,
+//     };
+
+//     return this.liquidationHandler.handleLiquidation(liquidationParams);
+//   }
+
+//   private delay(ms: number): Promise<void> {
+//     return new Promise((resolve) => setTimeout(resolve, ms));
+//   }
+
+//   private logError(error: unknown) {
+//     console.error(error);
+//     this.logger.log(error);
+//   }
+// }
